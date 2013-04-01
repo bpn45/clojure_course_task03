@@ -1,4 +1,5 @@
-(ns clojure-course-task03.core)
+(ns clojure-course-task03.core
+  (:require [clojure.set]))
 
 (defn join* [table-name conds]
   (let [op (first conds)
@@ -34,7 +35,7 @@
      (and (= (first flds) :all) (= (first allowed) :all)) "*"
      (and (= (first flds) :all) (not= (first allowed) :all)) (-fields** allowed)
      (= :all (first allowed)) (-fields** flds)
-     :else (-fields** v))))
+     :else (-fields** (filter v flds)))))
 
 (defn select* [table-name {:keys [fields where join order limit offset]}]
   (-> (str "SELECT " fields " FROM " table-name " ")
@@ -77,7 +78,7 @@
         ;; returns map {:where (where* ...), :join (join* ...), ...}
         env# (apply hash-map (apply concat env*))]
     
-    `(select* ~(str table-name)  ~env#)))
+    `(select* ~(str table-name) ~env#)))
 
 
 ;; Examples:
@@ -121,47 +122,45 @@
   ;;
   ;; Таблицы:
   ;; proposal -> [id, person, phone, address, region, comments, price]
-  ;; client -> [id, person, phone, region, comments, price_from, price_to]
+  ;; clients -> [id, person, phone, region, comments, price_from, price_to]
   ;; agents -> [proposal_id, agent, done]
 
   ;; Определяем группы пользователей и
   ;; их права на таблицы и колонки
   (group Agent
          proposal -> [person, phone, address, price]
-         agents -> [client_id, proposal_id, agent])
+         agents -> [clients_id, proposal_id, agent])
 
   ;; Предыдущий макрос создает эти функции
   (select-agent-proposal) ;; select person, phone, address, price from proposal;
-  (select-agent-agents)  ;; select client_id, proposal_id, agent from agents;
+  (select-agent-agents) ;; select clients_id, proposal_id, agent from agents;
 
 
 
 
   (group Operator
          proposal -> [:all]
-         client -> [:all])
+         clients -> [:all])
 
   ;; Предыдущий макрос создает эти функции
   (select-operator-proposal) ;; select * proposal;
-  (select-operator-clients)  ;; select * from clients;
+  (select-operator-clients) ;; select * from clients;
 
 
 
   (group Director
          proposal -> [:all]
-         client -> [:all]
+         clients -> [:all]
          agents -> [:all])
 
   ;; Предыдущий макрос создает эти функции
   (select-director-proposal) ;; select * proposal;
-  (select-director-clients)  ;; select * from clients;
-  (select-director-agents)  ;; select * from agents;
+  (select-director-clients) ;; select * from clients;
+  (select-director-agents) ;; select * from agents;
   
 
   ;; Определяем пользователей и их группы
 
-  ;; Макрос user должен сохранять разрешенные пользователю таблицы и поля в атоме *user-tables-vars*.
-  
   (user Ivanov
         (belongs-to Agent))
 
@@ -190,8 +189,8 @@
 
   ;; Агенту не доступны клиенты
   (with-user Ivanov
-    (select client
-            (fields :all)))  ;; Empty set
+    (select clients
+            (fields :all))) ;; Empty set
 
   ;; Директор может видеть состояние задач агентов
   (with-user Directorov
@@ -209,33 +208,32 @@
 (defmacro group [name & body]
   ;; Пример
   ;; (group Agent
-  ;;      proposal -> [person, phone, address, price]
-  ;;      agents -> [client_id, proposal_id, agent])
+  ;; proposal -> [person, phone, address, price]
+  ;; agents -> [clients_id, proposal_id, agent])
   ;; 1) Создает группу Agent
   ;; 2) Запоминает, какие таблицы (и какие колонки в таблицах)
-  ;;    разрешены в данной группе.
+  ;; разрешены в данной группе.
   ;; 3) Создает следующие функции
-  ;;    (select-agent-proposal) ;; select person, phone, address, price from proposal;
-  ;;    (select-agent-agents)  ;; select client_id, proposal_id, agent from agents;
+  ;; (select-agent-proposal) ;; select person, phone, address, price from proposal;
+  ;; (select-agent-agents) ;; select clients_id, proposal_id, agent from agents;
   )
 
 (defmacro user [name & body]
   ;; Пример
   ;; (user Ivanov
-  ;;     (belongs-to Agent))
+  ;; (belongs-to Agent))
   ;; Создает переменные Ivanov-proposal-fields-var = [:person, :phone, :address, :price]
-  ;; и Ivanov-agents-fields-var = [:client_id, :proposal_id, :agent]
-  ;; Сохраняет эти же переменные в атоме *user-tables-vars*.
+  ;; и Ivanov-agents-fields-var = [:clients_id, :proposal_id, :agent]
   )
 
 (defmacro with-user [name & body]
   ;; Пример
   ;; (with-user Ivanov
-  ;;   . . .)
+  ;; . . .)
   ;; 1) Находит все переменные, начинающиеся со слова Ivanov, в *user-tables-vars*
-  ;;    (Ivanov-proposal-fields-var и Ivanov-agents-fields-var)
+  ;; (Ivanov-proposal-fields-var и Ivanov-agents-fields-var)
   ;; 2) Создает локальные привязки без префикса Ivanov-:
-  ;;    proposal-fields-var и agents-fields-var.
-  ;;    Таким образом, функция select, вызванная внутри with-user, получает
-  ;;    доступ ко всем необходимым переменным вида <table-name>-fields-var.
+  ;; proposal-fields-var и agents-fields-var.
+  ;; Таким образом, функция select, вызванная внутри with-user, получает
+  ;; доступ ко всем необходимым переменным вида <table-name>-fields-var.
   )
