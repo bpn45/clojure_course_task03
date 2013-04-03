@@ -204,19 +204,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TBD: Implement the following macros
 ;;
-
+(def ^:dynamic *my-data* (atom {}))
 (defmacro group [name & body]
-  ;; Пример
-  ;; (group Agent
-  ;; proposal -> [person, phone, address, price]
-  ;; agents -> [clients_id, proposal_id, agent])
-  ;; 1) Создает группу Agent
-  ;; 2) Запоминает, какие таблицы (и какие колонки в таблицах)
-  ;; разрешены в данной группе.
-  ;; 3) Создает следующие функции
-  ;; (select-agent-proposal) ;; select person, phone, address, price from proposal;
-  ;; (select-agent-agents) ;; select clients_id, proposal_id, agent from agents;
-  )
+  (let [gr-key (keyword name)
+        gr-name (.toUpperCase (clojure.core/name name))]
+  (swap! assoc *my-data* gr-key [])
+   (for  [xx body]
+    (let [[table fun colvec] xx namefun (str "select-" (name  ~gr-name) "-" (name ~table)) ]
+    (swap! assoc *my-data* ~gr-key (vector (~gr-key @*my-data*) (vector ~table (vec (map keyword colvec)))))
+           (def (symbol ~namefun) `(fn [] (str "SELECT " (if (= :all (first colvec)) "*"
+                 (str ~@(interpose ", " `(map name ~colvec))))" FROM " `(name  ~table) " ")))))))
 
 (defmacro user [name & body]
   ;; Пример
@@ -224,7 +221,13 @@
   ;; (belongs-to Agent))
   ;; Создает переменные Ivanov-proposal-fields-var = [:person, :phone, :address, :price]
   ;; и Ivanov-agents-fields-var = [:clients_id, :proposal_id, :agent]
-  )
+  (let [gr-name (last body)
+        u-name (clojure.core/name name)]
+    (when  (= "belongs-to" (clojure.core/name (first body)))
+      (let [gr-key (keyword gr-name) vecdata (gr-key @*my-data*) ]
+        (for [[table colvec] vecdata ]
+          (def (symbol (str u-name "-" (clojure.core/name ~table) "-fields-var")) ~colvec))))))
+  
 
 (defmacro with-user [name & body]
   ;; Пример
@@ -236,4 +239,6 @@
   ;; proposal-fields-var и agents-fields-var.
   ;; Таким образом, функция select, вызванная внутри with-user, получает
   ;; доступ ко всем необходимым переменным вида <table-name>-fields-var.
-  )
+  (let [proposal-fields-var ~(symbol (str `(name ~name) "-proposal-fields-var"))
+        agents-fields-var ~(symbol (str `(name ~name) "-agents-fields-var"))]
+    ~body  ))
