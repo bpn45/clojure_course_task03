@@ -206,14 +206,19 @@
 ;;
 (def ^:dynamic *my-data* (atom {}))
 (defmacro group [name & body]
-  (let [gr-key (keyword name)
-        gr-name (.toUpperCase (clojure.core/name name))]
-  (swap! assoc *my-data* gr-key [])
-   (for  [xx body]
-    (let [[table fun colvec] xx namefun (str "select-" (name  ~gr-name) "-" (name ~table)) ]
-    (swap! assoc *my-data* ~gr-key (vector (~gr-key @*my-data*) (vector ~table (vec (map keyword colvec)))))
-           (def (symbol ~namefun) `(fn [] (str "SELECT " (if (= :all (first colvec)) "*"
-                 (str ~@(interpose ", " `(map name ~colvec))))" FROM " `(name  ~table) " ")))))))
+  (let [gr-name# (.toLowerCase (str name))
+         gr-key# (keyword (.toLowerCase (str name)))]
+      (loop  [res '()  bodypart#  (vec (partition 3 body)) ]
+       (if (empty? bodypart#) (conj   res 'do)
+           (let [[table# fun# colvec#] (first bodypart#)
+          ntable# (str table#)]
+         (swap!  *my-data* assoc gr-key# (conj (gr-key# @*my-data*)
+                                                   (vector ntable# (vec (map keyword colvec#)))))
+         (recur     (conj res `(defn ~(symbol (str "select-"  gr-name# "-" ntable#))
+                                    [] (str "SELECT " ~(if (= :all (first colvec#)) "*"
+                           (apply str (interpose "," (map str  colvec#)))) " FROM " ~ntable# " ")))
+        (next bodypart#)))))))
+
 
 (defmacro user [name & body]
   ;; Пример
@@ -221,12 +226,15 @@
   ;; (belongs-to Agent))
   ;; Создает переменные Ivanov-proposal-fields-var = [:person, :phone, :address, :price]
   ;; и Ivanov-agents-fields-var = [:clients_id, :proposal_id, :agent]
-  (let [gr-name (last body)
-        u-name (clojure.core/name name)]
-    (when  (= "belongs-to" (clojure.core/name (first body)))
-      (let [gr-key (keyword gr-name) vecdata (gr-key @*my-data*) ]
-        (for [[table colvec] vecdata ]
-          (def (symbol (str u-name "-" (clojure.core/name ~table) "-fields-var")) ~colvec))))))
+  (let [username# (str name)
+        usergroup# (keyword (.toLowerCase (str (last (first body))))) ]
+    (when  (= "belongs-to" (str  (first (first body))))
+      (loop [res '() vecdata# (usergroup# @*my-data*) ]
+        (if (empty? vecdata#) (conj res 'do)
+            (let [[table# colvec#] (first vecdata#)]
+              (recur (conj res `(def ~(symbol (str username# "-" table# "-fields-var")) ~colvec#)) (next vecdata#))))))))
+(defn varlist [name]
+  (filter #(re-find (re-pattern (str name)) (str %)) (ns-publics *ns*)))
   
 
 (defmacro with-user [name & body]
@@ -239,6 +247,11 @@
   ;; proposal-fields-var и agents-fields-var.
   ;; Таким образом, функция select, вызванная внутри with-user, получает
   ;; доступ ко всем необходимым переменным вида <table-name>-fields-var.
-  (let [proposal-fields-var ~(symbol (str `(name ~name) "-proposal-fields-var"))
-        agents-fields-var ~(symbol (str `(name ~name) "-agents-fields-var"))]
-    ~body  ))
+  (let [binvar# (filter #(re-find (re-pattern (str name)) (str %)) (ns-publics *ns*))
+        namelen# (inc (count (str name)))]
+    `(let ~(loop [res# [] myvar# binvar#]
+             (if (empty? myvar#)
+               res#
+               (let [namevar# (str (first (first myvar#))) nameloc# (subs namevar# namelen#)]
+                 (recur  (vec (concat  (vector (symbol nameloc#) (symbol namevar#)) res#)) (next myvar#)))))
+                    ~@body  )))

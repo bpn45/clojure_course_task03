@@ -9,11 +9,11 @@
 
 (group Operator
        proposal -> [:all]
-       client -> [:all])
+       clients -> [:all])
 
 (group Director
        proposal -> [:all]
-       client -> [:all]
+       clients -> [:all]
        agents -> [:all])
 
 
@@ -36,7 +36,7 @@
   (testing "Tesing Ivanov with-user"
     (let [result (with-user Ivanov
                    (select proposal
-                           (fields :person, :phone)
+                           (fields :phone, :person)
                            (where {:price 11})
                            (join agents (= agents.proposal_id proposal.id))
                            (order :f3)
